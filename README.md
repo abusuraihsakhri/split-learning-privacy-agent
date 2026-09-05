@@ -1,6 +1,6 @@
 # Split Learning Privacy Agent
 
-> **Domain:** Privacy-Preserving Healthcare & Federated Computing  
+> **Domain:** Privacy-Preserving Healthcare & Federated Computing
 > **Reference Guidelines & Standards:** `HIPAA Safe Harbor §164.514 & Differential Privacy RDP`
 
 <div align="center">
@@ -30,38 +30,87 @@
 
 ---
 
-## 💻 CLI Quickstart & Usage
+## 🚀 Installation
 
-### 1. Guided Interactive Mode
 ```bash
-python cli.py
+# Clone the repository
+git clone https://github.com/abusuraihsakhri/split-learning-privacy-agent.git
+cd split-learning-privacy-agent
+
+# Install core dependencies
+pip install fastapi uvicorn pydantic pytest
+
+# Optional: Install numpy for advanced split-learning modules
+pip install numpy
+
+# Copy environment template and configure
+cp .env.example .env
+# Edit .env and set a secure AUDIT_SECRET_KEY
 ```
 
-### 2. Direct Parameterized Evaluation
+### Environment Setup
+
+The application requires an `AUDIT_SECRET_KEY` environment variable for cryptographic audit trail integrity. Generate a secure key:
+
 ```bash
-python cli.py --task-id <value> --target <value> --primary <value> --secondary <value>
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Set it in your `.env` file or export it directly:
+
+```bash
+export AUDIT_SECRET_KEY="your-generated-key"
+```
+
+---
+
+## 💻 CLI Quickstart & Usage
+
+The CLI uses subcommands for different operations:
+
+### 1. Audit (Single Task Evaluation)
+```bash
+python cli.py audit --task-id TASK-001 --target KEY-01 --primary 28.5 --secondary 14.2 --critical --status DISCORDANT
+```
+
+### 2. Chat (Supervisory Query)
+```bash
+python cli.py chat "What is the system status?"
+```
+
+### 3. Batch (CSV Processing)
+```bash
+python cli.py batch -i sample.csv -o results.csv
+```
+
+### 4. Verify Audit Trail Integrity
+```bash
+python cli.py verify-audit
+```
+
+### 5. Serve (FastAPI REST Server)
+```bash
+python cli.py serve --host 127.0.0.1 --port 8000
 ```
 
 ### Parameter Reference
-- `--task-id`: Specifies input measurement or parameter value.
-- `--target`: Specifies input measurement or parameter value.
-- `--primary`: Specifies input measurement or parameter value.
-- `--secondary`: Specifies input measurement or parameter value.
-- `--critical`: Specifies input measurement or parameter value.
-- `--status`: Specifies input measurement or parameter value.
-- `--input`: Specifies input measurement or parameter value.
-- `--output`: Specifies input measurement or parameter value.
+- `--task-id`: Unique task/case identifier
+- `--target`: Target entity or specimen key
+- `--primary`: Primary measurement value (float)
+- `--secondary`: Secondary measurement value (float)
+- `--critical`: Flag for critical/emergency escalation
+- `--status`: Status descriptor (NOMINAL, DISCORDANT, etc.)
 
-### Input Data Schema
+### Input Data Schema (Batch CSV)
 
 | Field | Description | Requirement |
 |:------|:------------|:------------|
 | `task_id` | Parameter / observation metric | Required |
 | `target_identifier` | Parameter / observation metric | Required |
-| `primary_metric` | Parameter / observation metric | Required |
-| `secondary_metric` | Parameter / observation metric | Required |
-| `is_critical_flag` | Parameter / observation metric | Required |
-| `status_descriptor` | Parameter / observation metric | Required |
+| `primary_metric` | Primary measurement value | Required |
+| `secondary_metric` | Secondary measurement value | Optional |
+| `is_critical_flag` | Emergency escalation flag | Optional |
+| `status_descriptor` | Status code or phenotype | Optional |
 
 ---
 
@@ -86,7 +135,7 @@ pytest -v
 Execute high-throughput batch simulation benchmarks:
 
 ```bash
-python simulator.py --tasks 1000 --concurrency 8
+python simulator.py 1000
 ```
 
 ---
@@ -95,5 +144,45 @@ python simulator.py --tasks 1000 --concurrency 8
 
 ```bash
 docker build -t split-learning-privacy-agent .
-docker run -p 8000:8000 split-learning-privacy-agent
+docker run -p 8000:8000 -e AUDIT_SECRET_KEY="your-key" split-learning-privacy-agent
 ```
+
+Or using Docker Compose:
+
+```bash
+# Create .env file first
+cp .env.example .env
+# Edit .env with your secure key
+docker-compose up -d
+```
+
+---
+
+## 📁 Project Structure
+
+```
+split-learning-privacy-agent/
+├── agents/                  # Core agent modules (supervisor, workers, API)
+│   ├── api.py              # FastAPI REST endpoints
+│   ├── base.py             # PHI Guard, HMAC Audit Trail
+│   ├── models.py           # Pydantic data models
+│   ├── supervisor.py       # Master orchestrator
+│   └── workers.py          # Specialized evaluation workers
+├── split_learning/          # Split learning engine modules
+│   ├── agents.py           # Cut-layer agents
+│   ├── engine.py           # Core evaluation engine
+│   ├── byzantine_detector.py  # Byzantine resilience (requires numpy)
+│   ├── privacy_budget.py   # Differential privacy budget tracking
+│   └── secure_aggregation.py  # Shamir secret sharing (requires numpy)
+├── tests/                   # Test suite
+├── cli.py                   # Main CLI entry point
+├── simulator.py             # High-throughput simulation
+├── enrichment.py            # Feature enrichment suite
+└── web/                     # Web operations console
+```
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.

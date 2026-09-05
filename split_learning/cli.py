@@ -5,10 +5,22 @@ import argparse
 import csv
 import json
 import sys
+from pathlib import Path
 from .models import FrontierPayload
 from .agents import SplitLearningCoordinator
 
 coordinator = SplitLearningCoordinator()
+
+
+def _resolve_safe_path(file_path: str, must_exist: bool = False) -> Path:
+    """Resolve a file path safely, preventing path traversal outside cwd."""
+    base = Path.cwd()
+    resolved = (base / file_path).resolve()
+    if not str(resolved).startswith(str(base.resolve())):
+        raise ValueError(f"Path traversal detected: '{file_path}' escapes the working directory")
+    if must_exist and not resolved.is_file():
+        raise FileNotFoundError(f"Input file not found: '{file_path}'")
+    return resolved
 
 
 def main(argv=None):
@@ -69,7 +81,10 @@ def main(argv=None):
         return 0
 
     if args.command == "batch":
-        with open(args.input, mode="r", encoding="utf-8-sig") as f:
+        in_path = _resolve_safe_path(args.input, must_exist=True)
+        out_path = _resolve_safe_path(args.output, must_exist=False)
+
+        with open(in_path, mode="r", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
             fieldnames = list(reader.fieldnames or [])
             rows = list(reader)
@@ -77,13 +92,19 @@ def main(argv=None):
         out_fields = fieldnames + ["overall_status", "total_alerts", "critical_count", "consensus_summary"]
         out_rows = []
         for r in rows:
+            try:
+                primary = float(r.get("primary_metric", 15.0))
+                secondary = float(r.get("secondary_metric", 5.0))
+            except (ValueError, TypeError) as e:
+                print(f"Warning: Skipping row with invalid metrics: {r.get('task_id', '?')} ({e})")
+                continue
             payload = FrontierPayload(
                 task_id=r.get("task_id", "TASK-01"),
                 target_identifier=r.get("target_identifier", "TARGET-01"),
-                primary_metric=float(r.get("primary_metric", 15.0)),
-                secondary_metric=float(r.get("secondary_metric", 5.0)),
+                primary_metric=primary,
+                secondary_metric=secondary,
                 status_descriptor=r.get("status_descriptor", "NOMINAL"),
-                is_critical_flag=bool(r.get("is_critical_flag", False)),
+                is_critical_flag=str(r.get("is_critical_flag", "")).lower() in ("true", "1", "yes"),
             )
             dossier = coordinator.process(payload)
             row_dict = dict(r)
@@ -93,7 +114,7 @@ def main(argv=None):
             row_dict["consensus_summary"] = dossier["consensus_summary"]
             out_rows.append(row_dict)
 
-        with open(args.output, mode="w", encoding="utf-8", newline="") as f:
+        with open(out_path, mode="w", encoding="utf-8", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=out_fields)
             writer.writeheader()
             writer.writerows(out_rows)
