@@ -4,6 +4,7 @@ Command Line Interface for Split Learning Privacy Agent.
 import argparse
 import csv
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -19,7 +20,7 @@ def _resolve_safe_path(file_path: str, must_exist: bool = False) -> Path:
     base = Path.cwd()
     resolved = (base / file_path).resolve()
     # Prevent path traversal: resolved path must be under cwd
-    if not str(resolved).startswith(str(base.resolve())):
+    if not resolved.is_relative_to(base.resolve()):
         raise ValueError(f"Path traversal detected: '{file_path}' escapes the working directory")
     if must_exist and not resolved.is_file():
         raise FileNotFoundError(f"Input file not found: '{file_path}'")
@@ -91,7 +92,7 @@ def main(argv=None):
         trail = AuditLogger.get_trail()
         valid = AuditLogger.verify_integrity()
         print(f"Audit Trail Blocks: {len(trail)} | Cryptographic Integrity Verified: {valid}")
-        return 0
+        return 0 if valid else 1
 
     if args.command == "batch":
         in_path = _resolve_safe_path(args.input, must_exist=True)
@@ -107,7 +108,9 @@ def main(argv=None):
         for r in rows:
             try:
                 primary = float(r.get("primary_metric", 15.0))
-                secondary = float(r.get("secondary_metric", 5.0))
+                secondary = float(r.get("secondary_metric") or 0.0)
+                if not math.isfinite(primary) or not math.isfinite(secondary):
+                    raise ValueError("metrics must be finite")
             except (ValueError, TypeError) as e:
                 print(f"Warning: Skipping row with invalid metrics: {r.get('task_id', '?')} ({e})")
                 continue

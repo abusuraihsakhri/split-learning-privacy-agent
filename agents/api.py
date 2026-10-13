@@ -1,10 +1,12 @@
 """
 FastAPI REST API Server for Split Learning Privacy Agent.
 """
+from pathlib import Path
 from typing import Dict, Any, List
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from .base import AuditLogger, PHIGuard
+from .base import AuditLogger, PHIGuard, SecurityException
 from .models import SystemTaskPayload, ConsensusDossier
 from .supervisor import SystemSupervisor
 
@@ -19,6 +21,11 @@ app = FastAPI(
 
 class ChatRequest(BaseModel):
     query: str
+
+
+@app.get("/", include_in_schema=False)
+def index():
+    return FileResponse(Path(__file__).resolve().parent.parent / "web" / "index.html")
 
 
 @app.get("/health")
@@ -37,7 +44,12 @@ def metrics():
 
 @app.post("/api/audit")
 def api_audit(payload: SystemTaskPayload):
-    dossier = supervisor.process_task(payload)
+    try:
+        dossier = supervisor.process_task(payload)
+    except SecurityException:
+        raise HTTPException(status_code=422, detail="Identifier policy violation")
+    except RuntimeError:
+        raise HTTPException(status_code=503, detail="Audit service is not configured")
     return dossier.to_dict()
 
 
@@ -46,8 +58,8 @@ def api_chat(req: ChatRequest):
     try:
         ans = supervisor.query_supervisory_chat(req.query)
         return {"response": ans}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except SecurityException:
+        raise HTTPException(status_code=422, detail="Identifier policy violation")
 
 
 @app.get("/api/audit/logs")
