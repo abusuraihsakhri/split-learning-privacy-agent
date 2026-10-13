@@ -36,7 +36,7 @@ For Docker, populate `.env` from `.env.example` with a **new secret key**, then 
 
 ## Data handling and security
 
-Local browser mode stores results in memory for the current page session, makes no evaluation network request, and exports JSON only when requested. Python API mode sends inputs to the server and keeps the audit trail in server memory. **Do not use protected health information or real patient identifiers.** The regex-based PHI guard is not comprehensive de-identification. The API does not implement authentication, rate limiting, secure transport termination, or persistent logging and is not suitable for direct public exposure. Prefer binding it to loopback or protecting it behind an appropriately configured gateway.
+Local browser mode stores results in memory for the current page session, makes no evaluation network request, and exports JSON only when requested. Python API mode sends inputs to the server and keeps the audit trail in server memory. **Do not use protected health information or real patient identifiers.** The regex-based PHI guard is not comprehensive de-identification. The main audit and chat API endpoints do not implement user authentication, rate limiting, secure transport termination, or persistent logging and are not suitable for direct public exposure. Access to `GET /api/audit/logs` is disabled unless `AUDIT_LOG_READ_TOKEN` is configured; authorized clients must provide the matching `X-Audit-Token` header. Prefer binding it to loopback or protecting it behind an appropriately configured gateway.
 
 ## Development and verification
 

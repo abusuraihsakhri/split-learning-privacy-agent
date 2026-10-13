@@ -2,8 +2,10 @@
 FastAPI REST API Server for Split Learning Privacy Agent.
 """
 from pathlib import Path
+import hmac
+import os
 from typing import Dict, Any, List
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from .base import AuditLogger, PHIGuard, SecurityException
@@ -68,5 +70,11 @@ def api_chat(req: ChatRequest):
 
 
 @app.get("/api/audit/logs")
-def api_audit_logs():
+def api_audit_logs(x_audit_token: str = Header(default="")):
+    """Audit metadata is not available anonymously."""
+    expected = os.getenv("AUDIT_LOG_READ_TOKEN")
+    if not expected:
+        raise HTTPException(status_code=503, detail="Audit log access is disabled")
+    if not hmac.compare_digest(x_audit_token, expected):
+        raise HTTPException(status_code=403, detail="Audit log access denied")
     return {"audit_trail": AuditLogger.get_trail(), "verified": AuditLogger.verify_integrity()}
