@@ -77,5 +77,5 @@ class SystemSupervisor:
 
     def query_supervisory_chat(self, query: str) -> str:
         PHIGuard.assert_no_phi(query)
-        prompt = f"Supervisor inquiry for Split Learning Privacy Agent under HIPAA Safe Harbor §164.514 / Google SecAgg Standards: {query}"
+        prompt = f"Supervisor inquiry for Split Learning Privacy Agent, a non-clinical rules demonstration: {query}"
         return self.llm.invoke(prompt)

@@ -37,7 +37,7 @@ def app_script():
 
 @app.get("/health")
 def health():
-    return {"status": "HEALTHY", "service": "split-learning-privacy-agent", "domain": "Privacy-Preserving Federated Healthcare & FHE", "standard": "HIPAA Safe Harbor §164.514 / Google SecAgg Standards", "version": "3.0.0-ENTERPRISE"}
+    return {"status": "HEALTHY", "service": "split-learning-privacy-agent", "domain": "Privacy-Preserving Federated Healthcare & FHE", "standard": "Project-defined demonstration thresholds", "version": "3.0.0-ENTERPRISE"}
 
 
 @app.get("/metrics")
