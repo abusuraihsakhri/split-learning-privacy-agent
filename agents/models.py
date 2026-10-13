@@ -6,7 +6,7 @@ Standard: HIPAA Safe Harbor §164.514 / Google SecAgg Standards
 import datetime
 from enum import Enum
 from typing import Dict, Any, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class UrgencyLevel(str, Enum):
@@ -22,11 +22,13 @@ class SystemIntegrityStatus(str, Enum):
 
 
 class SystemTaskPayload(BaseModel):
-    task_id: str = Field(..., description="Unique task / case identifier")
-    target_identifier: str = Field(..., description="Entity, patient key, or genomic/cryptographic target")
+    model_config = ConfigDict(allow_inf_nan=False, extra="forbid", str_strip_whitespace=True)
+
+    task_id: str = Field(..., min_length=1, max_length=128, description="Unique task / case identifier")
+    target_identifier: str = Field(..., min_length=1, max_length=128, description="Opaque, non-patient target key")
     primary_metric: float = Field(..., description="Primary domain measurement or score")
     secondary_metric: float = Field(default=0.0, description="Secondary kinetic or confidence score")
-    status_descriptor: str = Field(default="NOMINAL", description="Status code or phenotype descriptor")
+    status_descriptor: str = Field(default="NOMINAL", max_length=256, description="Status code or descriptor")
     is_critical_flag: bool = Field(default=False, description="Emergency escalation or high priority trigger")
     attributes: Dict[str, Any] = Field(default_factory=dict, description="Metadata key-value pairs")
     timestamp: str = Field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
@@ -39,7 +41,7 @@ class AgentAlert(BaseModel):
     summary: str
     technical_details: str
     actionable_remediation: str
-    standard_reference: str = "HIPAA Safe Harbor §164.514 / Google SecAgg Standards"
+    standard_reference: str = "Project-defined demonstration thresholds; not a regulatory standard"
     timestamp: str = Field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
 
     def to_dict(self) -> Dict[str, Any]:
@@ -57,7 +59,7 @@ class ConsensusDossier(BaseModel):
     total_alerts: int
     critical_alerts_count: int
     alerts: List[AgentAlert]
-    standard_reference: str = "HIPAA Safe Harbor §164.514 / Google SecAgg Standards"
+    standard_reference: str = "Project-defined demonstration thresholds; not a regulatory standard"
     consensus_summary: str
     audit_hash: str
     timestamp: str = Field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())

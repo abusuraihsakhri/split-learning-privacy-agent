@@ -21,7 +21,7 @@ class ActivationShare:
     client_id: str
     share_index: int
     share_values: np.ndarray  # shares of the activation vector
-    commitment: List[int]     # Feldman commitment for verification
+    commitment: List[int]     # Placeholder; no commitment verification is implemented
     timestamp: float = field(default_factory=time.time)
 
 
@@ -44,7 +44,16 @@ class ShamirSecretSharing:
         self, values: np.ndarray, num_shares: int, threshold: int
     ) -> List[np.ndarray]:
         """Split a vector of values into n shares with threshold t."""
+        if not isinstance(num_shares, int) or not isinstance(threshold, int) or not (1 <= threshold <= num_shares < self.prime):
+            raise ValueError("Require 1 <= threshold <= num_shares < prime")
+        values = np.asarray(values)
+        if not np.issubdtype(values.dtype, np.integer):
+            raise TypeError("Activations must first be quantized to integer values")
+        if values.size == 0:
+            raise ValueError("Activation vectors cannot be empty")
         flat = values.flatten().astype(np.int64)
+        if np.any(np.abs(flat.astype(object)) > self.prime // 2):
+            raise ValueError("Activation magnitude exceeds centered field range")
         all_shares = []
         for _ in range(num_shares):
             all_shares.append(np.zeros(len(flat), dtype=np.int64))
@@ -70,20 +79,26 @@ class ShamirSecretSharing:
         if not shares:
             raise ValueError("No shares provided")
         shape = shares[0][1].shape
-        flat_shares = [(idx, s.flatten().astype(np.int64)) for idx, s in shares]
-        n = len(flat_shares[0][1])
-        result = np.zeros(n, dtype=np.int64)
-
-        for i, (xi, yi) in enumerate(flat_shares):
-            numerator = 1
-            denominator = 1
+        indices = [idx for idx, _ in shares]
+        if len(set(indices)) != len(indices) or any(not isinstance(i, int) or i <= 0 or i >= self.prime for i in indices):
+            raise ValueError("Share indices must be distinct positive field elements")
+        if any(s.shape != shape or not np.issubdtype(s.dtype, np.integer) for _, s in shares):
+            raise ValueError("Shares must have matching shapes and integer values")
+        flat_shares = [(idx, s.flatten()) for idx, s in shares]
+        result = np.zeros(flat_shares[0][1].size, dtype=np.int64)
+        weights = []
+        for i, (xi, _) in enumerate(flat_shares):
+            numerator, denominator = 1, 1
             for j, (xj, _) in enumerate(flat_shares):
                 if i != j:
-                    numerator = (numerator * (-xj)) % self.prime
-                    denominator = (denominator * (xi - xj)) % self.prime
-            lagrange = (numerator * pow(int(denominator), -1, self.prime)) % self.prime
-            result = (result + yi * lagrange) % self.prime
+                    numerator = numerator * (-xj) % self.prime
+                    denominator = denominator * (xi - xj) % self.prime
+            weights.append(numerator * pow(denominator, -1, self.prime) % self.prime)
 
+        # Python integer arithmetic avoids int64 overflow before the modulus.
+        for col in range(result.size):
+            value = sum(int(share[col]) * weight for (_, share), weight in zip(flat_shares, weights)) % self.prime
+            result[col] = value if value <= self.prime // 2 else value - self.prime
         return result.reshape(shape)
 
 
@@ -127,6 +142,8 @@ class SecureActivationAggregator:
         num_participants: int,
     ) -> List[ActivationShare]:
         """Generate Shamir shares of a client's smashed data."""
+        if num_participants < 2:
+            raise ValueError("At least two participants are required")
         threshold = max(2, int(num_participants * self.config.threshold_fraction) + 1)
         padded = self.pad_activations(activations)
         share_arrays = self.sss.split_vector(padded, num_participants, threshold)
@@ -152,19 +169,24 @@ class SecureActivationAggregator:
         num_participants: int,
     ) -> np.ndarray:
         """Aggregate shares from all clients to reconstruct summed activations."""
+        if num_participants < 2 or not all_shares:
+            raise ValueError("At least two participants and one client share set are required")
         threshold = max(2, int(num_participants * self.config.threshold_fraction) + 1)
-        aggregated = None
-        for client_shares in all_shares:
-            selected = client_shares[:threshold]
-            share_tuples = [(s.share_index, s.share_values) for s in selected]
-            reconstructed = self.sss.reconstruct_vector(share_tuples)
-            if aggregated is None:
-                aggregated = reconstructed.astype(np.float64)
-            else:
-                aggregated += reconstructed.astype(np.float64)
-        if aggregated is not None:
-            aggregated /= len(all_shares)
-        return aggregated
+        if any(len(client) < threshold for client in all_shares):
+            raise ValueError("Insufficient shares for reconstruction")
+        shape = all_shares[0][0].share_values.shape
+        combined = []
+        for position in range(threshold):
+            index = all_shares[0][position].share_index
+            parts = [client[position] for client in all_shares]
+            if any(share.share_index != index or share.share_values.shape != shape for share in parts):
+                raise ValueError("Share indices and shapes must align across clients")
+            # Combine corresponding shares BEFORE reconstruction. No individual
+            # client's activation vector is reconstructed by this aggregator.
+            summed = sum((part.share_values.astype(object) for part in parts)) % self.prime
+            combined.append((index, np.asarray(summed, dtype=np.int64)))
+        total = self.sss.reconstruct_vector(combined)
+        return total.astype(np.float64) / len(all_shares)
 
     def refresh_shares(self, client_id: str, activations: np.ndarray, num_participants: int) -> List[ActivationShare]:
         """Refresh shares after each forward/backward pass."""

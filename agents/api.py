@@ -1,10 +1,14 @@
 """
 FastAPI REST API Server for Split Learning Privacy Agent.
 """
+from pathlib import Path
+import hmac
+import os
 from typing import Dict, Any, List
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from .base import AuditLogger, PHIGuard
+from .base import AuditLogger, PHIGuard, SecurityException
 from .models import SystemTaskPayload, ConsensusDossier
 from .supervisor import SystemSupervisor
 
@@ -21,9 +25,19 @@ class ChatRequest(BaseModel):
     query: str
 
 
+@app.get("/", include_in_schema=False)
+def index():
+    return FileResponse(Path(__file__).resolve().parent.parent / "web" / "index.html")
+
+
+@app.get("/app.js", include_in_schema=False)
+def app_script():
+    return FileResponse(Path(__file__).resolve().parent.parent / "web" / "app.js", media_type="text/javascript")
+
+
 @app.get("/health")
 def health():
-    return {"status": "HEALTHY", "service": "split-learning-privacy-agent", "domain": "Privacy-Preserving Federated Healthcare & FHE", "standard": "HIPAA Safe Harbor §164.514 / Google SecAgg Standards", "version": "3.0.0-ENTERPRISE"}
+    return {"status": "HEALTHY", "service": "split-learning-privacy-agent", "domain": "Privacy-Preserving Federated Healthcare & FHE", "standard": "Project-defined demonstration thresholds", "version": "3.0.0-ENTERPRISE"}
 
 
 @app.get("/metrics")
@@ -37,7 +51,12 @@ def metrics():
 
 @app.post("/api/audit")
 def api_audit(payload: SystemTaskPayload):
-    dossier = supervisor.process_task(payload)
+    try:
+        dossier = supervisor.process_task(payload)
+    except SecurityException:
+        raise HTTPException(status_code=422, detail="Identifier policy violation")
+    except RuntimeError:
+        raise HTTPException(status_code=503, detail="Audit service is not configured")
     return dossier.to_dict()
 
 
@@ -46,10 +65,16 @@ def api_chat(req: ChatRequest):
     try:
         ans = supervisor.query_supervisory_chat(req.query)
         return {"response": ans}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except SecurityException:
+        raise HTTPException(status_code=422, detail="Identifier policy violation")
 
 
 @app.get("/api/audit/logs")
-def api_audit_logs():
+def api_audit_logs(x_audit_token: str = Header(default="")):
+    """Audit metadata is not available anonymously."""
+    expected = os.getenv("AUDIT_LOG_READ_TOKEN")
+    if not expected:
+        raise HTTPException(status_code=503, detail="Audit log access is disabled")
+    if not hmac.compare_digest(x_audit_token, expected):
+        raise HTTPException(status_code=403, detail="Audit log access denied")
     return {"audit_trail": AuditLogger.get_trail(), "verified": AuditLogger.verify_integrity()}

@@ -3,6 +3,7 @@ Supervisor Orchestrator & Operations Intelligence for Split Learning Privacy Age
 Domain: Privacy-Preserving Federated Healthcare & FHE
 """
 import uuid
+import json
 from typing import Dict, Any, List, Optional
 from .base import AuditLogger, ActionExecutor, PHIGuard
 from .models import SystemTaskPayload, AgentAlert, ConsensusDossier, UrgencyLevel, SystemIntegrityStatus
@@ -25,6 +26,7 @@ class SystemSupervisor:
         PHIGuard.assert_no_phi(payload.task_id)
         PHIGuard.assert_no_phi(payload.target_identifier)
         PHIGuard.assert_no_phi(payload.status_descriptor)
+        PHIGuard.assert_no_phi(json.dumps(payload.attributes, default=str))
 
         # Multi-worker evaluations
         all_alerts: List[AgentAlert] = []
@@ -75,5 +77,5 @@ class SystemSupervisor:
 
     def query_supervisory_chat(self, query: str) -> str:
         PHIGuard.assert_no_phi(query)
-        prompt = f"Supervisor inquiry for Split Learning Privacy Agent under HIPAA Safe Harbor §164.514 / Google SecAgg Standards: {query}"
+        prompt = f"Supervisor inquiry for Split Learning Privacy Agent, a non-clinical rules demonstration: {query}"
         return self.llm.invoke(prompt)
