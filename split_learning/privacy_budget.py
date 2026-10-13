@@ -43,10 +43,18 @@ class BudgetConfig:
 
 
 class PrivacyBudgetTracker:
-    """Track cumulative privacy expenditure across split learning epochs."""
+    """Track pure-DP composition bounds for a Laplace-mechanism model.
+
+    This is not a proof of privacy for an arbitrary split-learning or DP-SGD
+    training workflow. RDP mode uses the conservative basic bound.
+    """
 
     def __init__(self, config: Optional[BudgetConfig] = None):
         self.config = config or BudgetConfig()
+        if (not math.isfinite(self.config.total_epsilon) or self.config.total_epsilon <= 0
+                or not 0 < self.config.total_delta < 1
+                or not 0 < self.config.alert_threshold <= 1):
+            raise ValueError("Invalid privacy budget configuration")
         self.cumulative_epsilon: float = 0.0
         self.cumulative_delta: float = 0.0
         self.events: List[PrivacyEvent] = []
@@ -63,31 +71,47 @@ class PrivacyBudgetTracker:
         num_samples: int,
     ) -> Dict[str, Any]:
         """Record privacy consumption for a training step."""
-        if self.config.composition_method == CompositionMethod.BASIC:
-            step_epsilon = clipping_norm / noise_scale
-        elif self.config.composition_method == CompositionMethod.ADVANCED:
-            step_epsilon = clipping_norm / noise_scale
-            step_epsilon *= math.sqrt(2 * math.log(1.0 / self.config.total_delta))
-        else:
-            step_epsilon = clipping_norm / noise_scale
+        if (not isinstance(epoch, int) or epoch < 0 or not layer_name.strip()
+                or not isinstance(num_samples, int) or num_samples < 1):
+            raise ValueError("Invalid epoch, layer name, or sample count")
+        if (not math.isfinite(noise_scale) or noise_scale <= 0
+                or not math.isfinite(clipping_norm) or clipping_norm < 0):
+            raise ValueError("Noise scale must be positive and clipping norm nonnegative")
+        if self.config.auto_halt_enabled and self.cumulative_epsilon >= self.config.total_epsilon:
+            raise RuntimeError("Privacy budget already exhausted")
+        # This assumes a pure-DP mechanism with sensitivity=clipping_norm and
+        # Laplace noise scale=noise_scale; it is not an RDP/DP-SGD accountant.
+        step_epsilon = clipping_norm / noise_scale
 
         event = PrivacyEvent(
             epoch=epoch,
             layer_name=layer_name,
             epsilon_consumed=step_epsilon,
-            delta=self.config.total_delta,
+            delta=0.0,
             noise_scale=noise_scale,
             clipping_norm=clipping_norm,
         )
         self.events.append(event)
 
-        if self.config.composition_method == CompositionMethod.BASIC:
-            self.cumulative_epsilon += step_epsilon
+        epsilons = [e.epsilon_consumed for e in self.events]
+        basic_bound = sum(epsilons)
+        if self.config.composition_method == CompositionMethod.ADVANCED:
+            # Advanced composition for heterogeneous pure-DP mechanisms.
+            # Min with basic composition never provides a weaker bound.
+            if max(epsilons) < 50:
+                advanced_bound = (
+                    math.sqrt(2 * math.log(1 / self.config.total_delta) * sum(e * e for e in epsilons))
+                    + sum(e * math.expm1(e) for e in epsilons)
+                )
+                self.cumulative_epsilon = min(basic_bound, advanced_bound)
+            else:
+                self.cumulative_epsilon = basic_bound
+            self.cumulative_delta = self.config.total_delta
         else:
-            k = len(self.events)
-            self.cumulative_epsilon = math.sqrt(2 * k * math.log(1.0 / self.config.total_delta)) * step_epsilon
-
-        self.cumulative_delta += self.config.total_delta
+            # RDP selected without Renyi orders: use the conservative pure-DP
+            # composition bound, rather than reporting a fictitious RDP value.
+            self.cumulative_epsilon = basic_bound
+            self.cumulative_delta = 0.0
         self.epoch_count = max(self.epoch_count, epoch)
 
         if layer_name not in self.per_layer_leakage:
@@ -144,7 +168,7 @@ class PrivacyBudgetTracker:
         for layer, epsilon in self.per_layer_leakage.items():
             breakdown[layer] = {
                 "cumulative_epsilon": epsilon,
-                "fraction_of_total": epsilon / max(self.cumulative_epsilon, 1e-10),
+                "fraction_of_total": epsilon / max(sum(self.per_layer_leakage.values()), 1e-10),
             }
         return breakdown
 
