@@ -82,6 +82,8 @@ class PrivacyBudgetTracker:
         # This assumes a pure-DP mechanism with sensitivity=clipping_norm and
         # Laplace noise scale=noise_scale; it is not an RDP/DP-SGD accountant.
         step_epsilon = clipping_norm / noise_scale
+        if not math.isfinite(step_epsilon):
+            raise ValueError("Computed epsilon is not finite")
 
         event = PrivacyEvent(
             epoch=epoch,

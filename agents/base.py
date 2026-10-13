@@ -8,6 +8,7 @@ import json
 import time
 import hmac
 import hashlib
+import threading
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 from pydantic import BaseModel, Field
@@ -65,8 +66,13 @@ class AuditTrail:
             )
         self.secret_key = resolved_key.encode("utf-8")
         self.logs: List[Dict[str, Any]] = []
+        self._lock = threading.RLock()
 
     def log(self, actor: str, actor_tier: str, event_type: str, details: Dict[str, Any]) -> Dict[str, Any]:
+        with self._lock:
+            return self._log_locked(actor, actor_tier, event_type, details)
+
+    def _log_locked(self, actor: str, actor_tier: str, event_type: str, details: Dict[str, Any]) -> Dict[str, Any]:
         payload_str = json.dumps(details, sort_keys=True)
         assert_no_phi(payload_str)
         payload_hash = hashlib.sha256(payload_str.encode("utf-8")).hexdigest()
@@ -90,6 +96,10 @@ class AuditTrail:
 
     def verify_integrity(self) -> bool:
         """Verify each HMAC and the chain link, not only the previous hash."""
+        with self._lock:
+            return self._verify_locked()
+
+    def _verify_locked(self) -> bool:
         previous = "GENESIS_BLOCK_0000000000000000"
         for entry in self.logs:
             try:
@@ -111,7 +121,8 @@ class AuditTrail:
 
     def get_trail(self) -> List[Dict[str, Any]]:
         """Return a snapshot so consumers cannot mutate the live chain."""
-        return [entry.copy() for entry in self.logs]
+        with self._lock:
+            return [entry.copy() for entry in self.logs]
 
 
 _AUDIT_INSTANCE: Optional[AuditTrail] = None

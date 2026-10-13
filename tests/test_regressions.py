@@ -74,3 +74,16 @@ def test_sibling_directory_path_not_allowed(monkeypatch, tmp_path):
     for resolve in (_resolve_safe_path, _resolve_split_path):
         with pytest.raises(ValueError, match="Path traversal detected"):
             resolve("../repo-backup/file.csv")
+
+
+def test_concurrent_audit_append_keeps_chain_valid():
+    from concurrent.futures import ThreadPoolExecutor
+
+    trail = AuditTrail(secret_key="thread-test-key")
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        list(executor.map(
+            lambda n: trail.log("worker", "test", "event", {"number": n}),
+            range(80),
+        ))
+    assert len(trail.get_trail()) == 80
+    assert trail.verify_integrity()

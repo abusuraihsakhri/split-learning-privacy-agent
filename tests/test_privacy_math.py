@@ -56,3 +56,10 @@ def test_rdp_fallback_does_not_underreport_pure_dp():
     tracker.consume_budget(1, "layer", 1, 1, 32)
     tracker.consume_budget(2, "layer", 1, 3, 32)
     assert tracker.cumulative_epsilon == pytest.approx(4.0)
+
+
+def test_epsilon_overflow_rejected_without_recording():
+    tracker = PrivacyBudgetTracker()
+    with pytest.raises(ValueError, match="not finite"):
+        tracker.consume_budget(1, "layer", 1e-300, 1e300, 1)
+    assert not tracker.events
