@@ -1,188 +1,53 @@
 # Split Learning Privacy Agent
 
-> **Domain:** Privacy-Preserving Healthcare & Federated Computing
-> **Reference Guidelines & Standards:** `HIPAA Safe Harbor §164.514 & Differential Privacy RDP`
+A research-oriented Python toolkit with a rule-based supervisory audit service, mathematical split-learning utilities, a CLI, and an optional browser demonstration.
 
-<div align="center">
+## Features
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-3776AB.svg?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688.svg?logo=fastapi&logoColor=white)
-![Audit Trail](https://img.shields.io/badge/Audit-HMAC--SHA256_Tamper--Evident-brightgreen.svg)
-![Zero-PHI Guard](https://img.shields.io/badge/Guard-Zero--PHI_Outbound-blue.svg)
-![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)
+- **Supervisory audit:** three deterministic rules (primary metric >25; secondary metric >12 or critical flag; anomaly-related descriptors), producing alerts and overall status.
+- **Audit ledger:** in-memory HMAC-SHA256 chaining and signature verification using `AUDIT_SECRET_KEY`. The ledger is **not durable across restarts**.
+- **Split-learning examples:** a separate coordinator and evaluation engine; finite-field Shamir sharing, share aggregation, budget monitoring, and gradient anomaly utilities (NumPy optional).
+- **Interfaces:** CLI, FastAPI REST endpoints, and an interactive static HTML/JavaScript demo with JSON download.
 
-</div>
+**Scope and limitations:** This project does not implement end-to-end split neural-network training, quantify mutual information leakage, prove differential privacy for arbitrary models, provide a production secure aggregation protocol, or establish HIPAA compliance. The budget monitor assumes a pure-DP Laplace mechanism with a supplied clipping sensitivity and noise scale; its RDP option currently uses conservative basic composition rather than an RDP accountant. Cut-layer values must be **integer-quantized** before Shamir sharing. Commitments and malicious-share verification are not implemented.
 
----
+## Browser demonstration
 
-## 📖 What It Does
+The `web/` directory contains a self-contained browser application. Open `web/index.html` locally, or access it from the Python API homepage. The local mode evaluates the same three rules without an API request, persistent storage, or cryptographic signing. The Python API mode communicates with a running backend. GitHub Pages publication is configured through `.github/workflows/pages.yml`; availability depends on the repository's Pages settings and a successful deployment.
 
-**Split Learning Privacy Agent** is an advanced analytical and computational platform implementing Cut-layer neural network split learning & mutual information privacy leakage auditor.
+## Install and run
 
----
-
-## ⚙️ Key Capabilities & Algorithmic Modules
-
-- **Deterministic Calculation Engine**: Strict compliance with standard reference formulations and thresholds.
-- **Risk & Urgency Classification**: Multi-tier categorization with automated clinical/operational action recommendations.
-- **Validation & Guardrails**: Rigorous input bounds checking and anomaly detection.
-
----
-
-## 🚀 Installation
+Requires Python 3.10 or newer.
 
 ```bash
-# Clone the repository
 git clone https://github.com/abusuraihsakhri/split-learning-privacy-agent.git
 cd split-learning-privacy-agent
-
-# Install core dependencies
-pip install fastapi uvicorn pydantic pytest
-
-# Optional: Install numpy for advanced split-learning modules
-pip install numpy
-
-# Copy environment template and configure
-cp .env.example .env
-# Edit .env and set a secure AUDIT_SECRET_KEY
-```
-
-### Environment Setup
-
-The application requires an `AUDIT_SECRET_KEY` environment variable for cryptographic audit trail integrity. Generate a secure key:
-
-```bash
-python -c "import secrets; print(secrets.token_hex(32))"
-```
-
-Set it in your `.env` file or export it directly:
-
-```bash
-export AUDIT_SECRET_KEY="your-generated-key"
-```
-
----
-
-## 💻 CLI Quickstart & Usage
-
-The CLI uses subcommands for different operations:
-
-### 1. Audit (Single Task Evaluation)
-```bash
-python cli.py audit --task-id TASK-001 --target KEY-01 --primary 28.5 --secondary 14.2 --critical --status DISCORDANT
-```
-
-### 2. Chat (Supervisory Query)
-```bash
-python cli.py chat "What is the system status?"
-```
-
-### 3. Batch (CSV Processing)
-```bash
+python -m pip install -e ".[api,test,numpy]"
+export AUDIT_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_hex(32))')"
+python cli.py audit --task-id DEMO-001 --target KEY-001 --primary 26 --secondary 13
 python cli.py batch -i sample.csv -o results.csv
-```
-
-### 4. Verify Audit Trail Integrity
-```bash
 python cli.py verify-audit
-```
-
-### 5. Serve (FastAPI REST Server)
-```bash
 python cli.py serve --host 127.0.0.1 --port 8000
 ```
 
-### Parameter Reference
-- `--task-id`: Unique task/case identifier
-- `--target`: Target entity or specimen key
-- `--primary`: Primary measurement value (float)
-- `--secondary`: Secondary measurement value (float)
-- `--critical`: Flag for critical/emergency escalation
-- `--status`: Status descriptor (NOMINAL, DISCORDANT, etc.)
+Open `http://127.0.0.1:8000/` for the UI, `/docs` for FastAPI documentation, `/health` for health, and `/metrics` for JSON counters. `POST /api/audit` accepts a JSON `SystemTaskPayload`. The second, independent CLI is `python -m split_learning.cli --help`; the installed `split-learning-privacy-engine` command invokes it.
 
-### Input Data Schema (Batch CSV)
+For Docker, populate `.env` from `.env.example` with a **new secret key**, then run `docker compose up --build`. The container runs as an unprivileged user.
 
-| Field | Description | Requirement |
-|:------|:------------|:------------|
-| `task_id` | Parameter / observation metric | Required |
-| `target_identifier` | Parameter / observation metric | Required |
-| `primary_metric` | Primary measurement value | Required |
-| `secondary_metric` | Secondary measurement value | Optional |
-| `is_critical_flag` | Emergency escalation flag | Optional |
-| `status_descriptor` | Status code or phenotype | Optional |
+## Data handling and security
 
----
+Local browser mode stores results in memory for the current page session, makes no evaluation network request, and exports JSON only when requested. Python API mode sends inputs to the server and keeps the audit trail in server memory. **Do not use protected health information or real patient identifiers.** The regex-based PHI guard is not comprehensive de-identification. The API does not implement authentication, rate limiting, secure transport termination, or persistent logging and is not suitable for direct public exposure. Prefer binding it to loopback or protecting it behind an appropriately configured gateway.
 
-## 🛡️ Security & Enterprise Architecture
-
-* **Zero-PHI Outbound Interceptor:** Active AST and regex inspection blocking SSNs, MRNs, phone numbers, and patient identifiers.
-* **Tamper-Evident HMAC-SHA256 Audit Trail:** Chained, cryptographically signed logs for every evaluation and state transition.
-* **Air-Gapped LLM Reasoning Adapter:** Agnostic integration for local Ollama instances (`llama3`, `mistral`), Claude 3.5 Sonnet, GPT-4o, and deterministic test mocks.
-* **Active Learning Bayesian Calibration:** Dynamic tracker updating worker reliability weights and monitoring Brier calibration drift.
-* **FastAPI & Prometheus Telemetry:** Exposes OpenAPI 3.1 REST endpoints and operational Prometheus metrics (`/metrics`).
-
----
-
-## 🧪 Testing & Verification
-
-Run the automated test suite:
+## Development and verification
 
 ```bash
-pytest -v
+python -m pytest -q
+python -m compileall -q agents split_learning cli.py enrichment.py simulator.py
+node --test web/app.test.cjs
 ```
 
-Execute high-throughput batch simulation benchmarks:
+GitHub Actions runs Python 3.10–3.12 tests, browser-rule unit tests, and a keyed HMAC check. The web demo works in current Chromium, Firefox, and Safari releases supporting modern JavaScript; the API requires a running Python server.
 
-```bash
-python simulator.py 1000
-```
+## License
 
----
-
-## 🐳 Container Deployment
-
-```bash
-docker build -t split-learning-privacy-agent .
-docker run -p 8000:8000 -e AUDIT_SECRET_KEY="your-key" split-learning-privacy-agent
-```
-
-Or using Docker Compose:
-
-```bash
-# Create .env file first
-cp .env.example .env
-# Edit .env with your secure key
-docker-compose up -d
-```
-
----
-
-## 📁 Project Structure
-
-```
-split-learning-privacy-agent/
-├── agents/                  # Core agent modules (supervisor, workers, API)
-│   ├── api.py              # FastAPI REST endpoints
-│   ├── base.py             # PHI Guard, HMAC Audit Trail
-│   ├── models.py           # Pydantic data models
-│   ├── supervisor.py       # Master orchestrator
-│   └── workers.py          # Specialized evaluation workers
-├── split_learning/          # Split learning engine modules
-│   ├── agents.py           # Cut-layer agents
-│   ├── engine.py           # Core evaluation engine
-│   ├── byzantine_detector.py  # Byzantine resilience (requires numpy)
-│   ├── privacy_budget.py   # Differential privacy budget tracking
-│   └── secure_aggregation.py  # Shamir secret sharing (requires numpy)
-├── tests/                   # Test suite
-├── cli.py                   # Main CLI entry point
-├── simulator.py             # High-throughput simulation
-├── enrichment.py            # Feature enrichment suite
-└── web/                     # Web operations console
-```
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE).

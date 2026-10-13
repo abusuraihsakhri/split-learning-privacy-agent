@@ -28,6 +28,11 @@ def index():
     return FileResponse(Path(__file__).resolve().parent.parent / "web" / "index.html")
 
 
+@app.get("/app.js", include_in_schema=False)
+def app_script():
+    return FileResponse(Path(__file__).resolve().parent.parent / "web" / "app.js", media_type="text/javascript")
+
+
 @app.get("/health")
 def health():
     return {"status": "HEALTHY", "service": "split-learning-privacy-agent", "domain": "Privacy-Preserving Federated Healthcare & FHE", "standard": "HIPAA Safe Harbor §164.514 / Google SecAgg Standards", "version": "3.0.0-ENTERPRISE"}
